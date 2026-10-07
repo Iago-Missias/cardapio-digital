@@ -16,6 +16,25 @@ export type ItemPedido = {
   precoTotal: number
 }
 
+/**
+ * Gera o próximo código sequencial para o restaurante.
+ * Pega o MAIOR código existente (ex: A-042) e retorna o próximo (A-043).
+ * Isso evita conflitos com pedidos antigos ou deletados.
+ */
+async function gerarCodigo(restauranteId: string): Promise<string> {
+  const resultado = await db.execute(sql`
+    select coalesce(
+      max(cast(substring(codigo from 3) as int)),
+      0
+    ) + 1 as proximo
+    from pedidos
+    where restaurante_id = ${restauranteId}
+      and codigo ~ '^A-[0-9]+$'
+  `)
+  const proximo = (resultado[0] as any)?.proximo ?? 1
+  return `A-${String(proximo).padStart(3, '0')}`
+}
+
 export async function criarPedido(input: {
   slug: string
   clienteNome: string
@@ -39,32 +58,46 @@ export async function criarPedido(input: {
 
     const total = input.itens.reduce((s, i) => s + i.precoTotal, 0)
 
-    // Gera código sequencial do dia (A-001, A-002...)
-    const hoje = new Date()
-    const inicioDia = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
+    // Gera código sequencial baseado no MAIOR existente (à prova de conflitos)
+    let codigo = await gerarCodigo(rest.id)
 
-    const resultado = await db.execute(sql`
-      select count(*)::int as total
-      from pedidos
-      where restaurante_id = ${rest.id}
-        and criado_em >= ${inicioDia.toISOString()}
-    `)
+    // Tenta inserir até 5 vezes, incrementando o código se houver conflito
+    const MAX_TENTATIVAS = 5
+    let inserido = false
 
-    const count = (resultado[0] as any)?.total ?? 0
-    const numero = String(count + 1).padStart(3, '0')
-    const codigo = `A-${numero}`
+    for (let tentativa = 0; tentativa < MAX_TENTATIVAS; tentativa++) {
+      try {
+        await db.insert(pedidos).values({
+          restauranteId: rest.id,
+          codigo,
+          clienteNome: input.clienteNome.trim(),
+          clienteWhatsapp: input.clienteWhatsapp.replace(/\D/g, ''),
+          itens: input.itens,
+          subtotal: total.toFixed(2),
+          total: total.toFixed(2),
+          status: 'aguardando_pagamento',
+          metodoPagamento: 'local',
+        })
+        inserido = true
+        break // ✅ sucesso, sai do loop
+      } catch (e: any) {
+        // Verifica se é conflito de código duplicado (código PostgreSQL 23505)
+        const isDuplicado =
+          e?.cause?.code === '23505' || e?.code === '23505'
 
-    await db.insert(pedidos).values({
-      restauranteId: rest.id,
-      codigo,
-      clienteNome: input.clienteNome.trim(),
-      clienteWhatsapp: input.clienteWhatsapp.replace(/\D/g, ''),
-      itens: input.itens,
-      subtotal: total.toFixed(2),
-      total: total.toFixed(2),
-      status: 'aguardando_pagamento',
-      metodoPagamento: 'local',
-    })
+        if (isDuplicado && tentativa < MAX_TENTATIVAS - 1) {
+          // Incrementa o código e tenta de novo
+          const num = parseInt(codigo.split('-')[1], 10) + 1
+          codigo = `A-${String(num).padStart(3, '0')}`
+          continue
+        }
+        throw e // outro erro, propaga
+      }
+    }
+
+    if (!inserido) {
+      return { ok: false, erro: 'Não foi possível gerar um código único' }
+    }
 
     revalidatePath('/admin/pedidos')
     revalidatePath('/admin')
