@@ -25,6 +25,9 @@ export default async function EditarProdutoPage({
 
   if (!prod) notFound()
 
+  // ✅ FIX 1: captura o id AQUI, fora da server action
+  const produtoId = prod.id
+
   const rest = await db.query.restaurantes.findFirst()
   const cats = rest
     ? await db.select().from(categorias)
@@ -45,10 +48,10 @@ export default async function EditarProdutoPage({
     })
   )
 
-  // 🔥 Redireciona para /admin/produtos após salvar
+  // ✅ FIX 1 (continuação): usa produtoId, não prod.id
   async function salvarDadosBasicos(formData: FormData) {
     'use server'
-    await atualizarProduto(prod.id, formData)
+    await atualizarProduto(produtoId, formData)
     redirect('/admin/produtos')
   }
 
@@ -85,7 +88,8 @@ export default async function EditarProdutoPage({
           </label>
           <label className="block">
             <span className="text-sm text-gray-700">Categoria *</span>
-            <select name="categoriaId" defaultValue={prod.categoriaId} required
+            {/* ✅ FIX 2: ?? '' para aceitar null */}
+            <select name="categoriaId" defaultValue={prod.categoriaId ?? ''} required
               className="mt-1 w-full px-3 py-2 border rounded-lg">
               {cats.map((c) => (
                 <option key={c.id} value={c.id}>{c.nome}</option>
