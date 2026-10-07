@@ -32,7 +32,7 @@ export default async function AdminLayout({
             {rest?.logoUrl ? (
               <div
                 className="relative w-14 h-14 rounded-full overflow-hidden flex-shrink-0 shadow-md"
-                style={{ backgroundColor: cor || undefined}}
+                style={{ backgroundColor: rest.corPrimaria || undefined }}
               >
                 <img
                   src={rest.logoUrl}
