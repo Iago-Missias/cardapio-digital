@@ -13,7 +13,7 @@ async function seed() {
   await db.delete(restaurantes)
 
   const [rest] = await db.insert(restaurantes).values({
-    slug: 'lanchonete-do-ze',
+    slug: 'cantodoacaraje',
     nome: 'Lanchonete do Zé',
     whatsapp: '5511999999999',
     corPrimaria: '#c0392b',
