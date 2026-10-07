@@ -81,6 +81,11 @@ export async function POST(
       return NextResponse.json({ erro: 'Pedido nao encontrado' }, { status: 404 })
     }
 
+    // ✅ CORREÇÃO: verifica se restauranteId existe antes de usar no eq()
+    if (!pedido.restauranteId) {
+      return NextResponse.json({ erro: 'Pedido sem restaurante associado' }, { status: 400 })
+    }
+
     const rest = await db.query.restaurantes.findFirst({
       where: eq(restaurantes.id, pedido.restauranteId),
     })
